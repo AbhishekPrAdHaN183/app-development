@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus Demand Forecaster - Predictive Sales Analytics</title>
+    
+    <!-- Premium Typography and Icons -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Link to Custom Premium Stylesheet -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+
+    <!-- Flash Message Banner -->
+    {% with messages = get_flashed_messages(category_filter=["error"]) %}
+      {% if messages %}
+        <div class="toast-error" id="errorToast">
+            <div class="toast-content">
+                <i class="fa-solid fa-circle-exclamation error-icon"></i>
+                <div class="message">
+                    <span class="text text-1">Error</span>
+                    <span class="text text-2">{{ messages[0] }}</span>
+                </div>
+            </div>
+            <i class="fa-solid fa-xmark close-toast" onclick="document.getElementById('errorToast').remove()"></i>
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    {% if session.get('username') %}
+    <!-- ========================================== -->
+    <!--          AUTHENTICATED DASHBOARD           -->
+    <!-- ========================================== -->
+    <div class="app-container">
+        
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="brand">
+                <div class="brand-logo">
+                    <i class="fa-solid fa-chart-line-up logo-icon"></i>
+                </div>
+                <div class="brand-info">
+                    <h1>NEXUS</h1>
+                    <span>Predictive Hub</span>
+                </div>
+            </div>
+            
+            <nav class="nav-menu">
+                <a href="#" class="nav-item active" data-tab="dashboard-tab">
+                    <i class="fa-solid fa-house-chimney"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a href="#" class="nav-item" data-tab="simulator-tab">
+                    <i class="fa-solid fa-sliders"></i>
+                    <span>Elasticity Sim</span>
+                </a>
+                <a href="#" class="nav-item" data-tab="training-tab">
+                    <i class="fa-solid fa-brain"></i>
+                    <span>Model Console</span>
+                </a>
+                <a href="#" class="nav-item" data-tab="data-tab">
+                    <i class="fa-solid fa-database"></i>
+                    <span>Data Manager</span>
+                </a>
+            </nav>
+            
+            <div class="sidebar-user">
+                <div class="user-avatar">
+                    <i class="fa-solid fa-circle-user"></i>
+                </div>
+                <div class="user-info">
+                    <span class="username">{{ session.username }}</span>
+                    <span class="role">Administrator</span>
+                </div>
+                <a href="/logout" class="logout-btn" title="Log Out">
+                    <i class="fa-solid fa-arrow-right-from-bracket"></i>
+                </a>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            
+            <!-- Top Dashboard Bar -->
+            <header class="content-header">
+                <div class="header-title">
+                    <h2>Predictive Sales Dashboard</h2>
+                    <p>Real-time demand forecasting and regression analytics</p>
+                </div>
+                <div class="model-badge" id="modelBadge">
+                    <i class="fa-solid fa-circle-check"></i>
+                    <span id="modelBadgeText">Retrieving model status...</span>
+                </div>
+            </header>
+            
+            <!-- Dashboard Tab Content -->
+            <div id="dashboard-tab" class="tab-pane active">
+                
+                <!-- KPI Statistics Grid -->
+                <section class="kpi-grid">
+                    <div class="kpi-card glassmorphic">
+                        <div class="kpi-icon-container revenue">
+                            <i class="fa-solid fa-dollar-sign"></i>
+                        </div>
+                        <div class="kpi-details">
+                            <h3>Total Revenue</h3>
+                            <p class="kpi-value" id="statRevenue">$0.00</p>
+                            <span class="kpi-trend positive" id="statDateRange"><i class="fa-solid fa-calendar-days"></i> Checking logs</span>
+                        </div>
+                    </div>
+                    
+                    <div class="kpi-card glassmorphic">
+                        <div class="kpi-icon-container sales">
+                            <i class="fa-solid fa-cubes"></i>
+                        </div>
+                        <div class="kpi-details">
+                            <h3>Units Sold</h3>
+                            <p class="kpi-value" id="statUnits">0</p>
+                            <span class="kpi-trend" id="statTxCount">0 batches</span>
+                        </div>
+                    </div>
+                    
+                    <div class="kpi-card glassmorphic">
+                        <div class="kpi-icon-container accuracy">
+                            <i class="fa-solid fa-crosshairs"></i>
+                        </div>
+                        <div class="kpi-details">
+                            <h3>Model Fit (R²)</h3>
+                            <p class="kpi-value" id="statR2">N/A</p>
+                            <span class="kpi-trend" id="statAlgoName">No model loaded</span>
+                        </div>
+                    </div>
+                    
+                    <div class="kpi-card glassmorphic">
+                        <div class="kpi-icon-container error-kpi">
+                            <i class="fa-solid fa-chart-line"></i>
+                        </div>
+                        <div class="kpi-details">
+                            <h3>Model RMSE</h3>
+                            <p class="kpi-value" id="statRMSE">N/A</p>
+                            <span class="kpi-trend" id="statPromoCount">0 promo transactions</span>
+                        </div>
+                    </div>
+                </section>
+                
+                <!-- Main Forecasting Visualization -->
+                <section class="chart-section glassmorphic">
+                    <div class="section-header">
+                        <h3><i class="fa-solid fa-wave-square"></i> Sales Demand & 30-Day Predictive Forecast</h3>
+                        <div class="chart-actions">
+                            <button class="btn btn-secondary btn-sm" onclick="fetchForecastData()"><i class="fa-solid fa-rotate-right"></i> Refresh Forecast</button>
+                        </div>
+                    </div>
+                    <div class="chart-container main-chart">
+                        <canvas id="forecastChart"></canvas>
+                    </div>
+                </section>
+                
+                <!-- Secondary Charts & Insights -->
+                <div class="grid-2-col">
+                    <section class="chart-section glassmorphic">
+                        <div class="section-header">
+                            <h3><i class="fa-solid fa-chart-pie"></i> Category Distribution</h3>
+                        </div>
+                        <div class="chart-container category-chart">
+                            <canvas id="categoryChart"></canvas>
+                        </div>
+                    </section>
+                    
+                    <section class="chart-section glassmorphic">
+                        <div class="section-header">
+                            <h3><i class="fa-solid fa-list-check"></i> Feature Importances</h3>
+                        </div>
+                        <div class="feature-importance-list" id="featureImportanceList">
+                            <div class="empty-state">
+                                <i class="fa-solid fa-brain"></i>
+                                <p>Feature importances will populate once the model is trained.</p>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+            </div>
+
+            <!-- Elasticity Simulator Tab -->
+            <div id="simulator-tab" class="tab-pane">
+                <div class="grid-2-col">
+                    <!-- Control Settings Panel -->
+                    <section class="glassmorphic card-form">
+                        <h3><i class="fa-solid fa-sliders"></i> Elasticity Controls</h3>
+                        <p class="sub-instructions">Vary unit prices and toggle promotional environments to simulate instantaneous demand responses using the trained machine learning pipeline.</p>
+                        
+                        <div class="form-group slider-group">
+                            <div class="slider-label">
+                                <label for="simPrice">Simulated Unit Price ($)</label>
+                                <span id="simPriceVal" class="slider-counter">$25.00</span>
+                            </div>
+                            <input type="range" id="simPrice" min="1.00" max="500.00" step="0.50" value="25.00" oninput="updateElasticity()">
+                            <div class="slider-bounds">
+                                <span>Min: $1.00</span>
+                                <span>Max: $500.00</span>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group toggle-group">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="simPromo" onchange="updateElasticity()">
+                                <span class="slider-toggle"></span>
+                            </label>
+                            <div class="toggle-description">
+                                <span class="toggle-title">Promotional Campaign Active</span>
+                                <span class="toggle-sub">Injects a marketing promo event booster into the predictive features.</span>
+                            </div>
+                        </div>
+                        
+                        <div class="simulator-baseline-alert">
+                            <i class="fa-solid fa-circle-info"></i>
+                            <span>Simulation isolates price elasticity by anchoring lag features to the 30-day historical running average.</span>
+                        </div>
+                    </section>
+                    
+                    <!-- Prediction Results Screen -->
+                    <section class="glassmorphic simulator-display">
+                        <h3><i class="fa-solid fa-circle-nodes"></i> Predicted Daily Response</h3>
+                        
+                        <div class="gauge-grid">
+                            <div class="gauge-card">
+                                <span class="gauge-title">EXPECTED UNITS SOLD</span>
+                                <span class="gauge-metric text-gradient" id="simResultUnits">0.0</span>
+                                <span class="gauge-label">units/day</span>
+                            </div>
+                            
+                            <div class="gauge-card">
+                                <span class="gauge-title">SIMULATED DAILY REVENUE</span>
+                                <span class="gauge-metric text-gradient" id="simResultRevenue">$0.00</span>
+                                <span class="gauge-label">gross revenue</span>
+                            </div>
+                        </div>
+                        
+                        <div class="simulator-analysis">
+                            <h4>Price Elasticity Insight</h4>
+                            <div class="insight-container" id="simInsightText">
+                                <i class="fa-solid fa-spinner fa-spin"></i> Loading elasticity evaluation...
+                            </div>
+                        </div>
+                    </section>
+                </div>
+            </div>
+
+            <!-- Model Console Tab -->
+            <div id="training-tab" class="tab-pane">
+                <div class="grid-2-col">
+                    <!-- Re-train Configurations -->
+                    <section class="glassmorphic card-form">
+                        <h3><i class="fa-solid fa-gear"></i> Hyperparameter Tuning</h3>
+                        <p class="sub-instructions">Select regression configurations to modify feature extraction and train a fresh prediction model.</p>
+                        
+                        <form id="trainForm" onsubmit="triggerRetraining(event)">
+                            <div class="form-group">
+                                <label for="trainAlgo">Forecasting Algorithm</label>
+                                <select id="trainAlgo" name="algorithm">
+                                    <option value="random_forest" selected>Random Forest Regressor (Non-Linear)</option>
+                                    <option value="linear_regression">Ridge Regression (Linear)</option>
+                                </select>
+                            </div>
+                            
+                            <div class="form-group slider-group">
+                                <div class="slider-label">
+                                    <label for="trainLags">Autoregressive Lag Days</label>
+                                    <span id="trainLagsVal" class="slider-counter">7 days</span>
+                                </div>
+                                <input type="range" id="trainLags" name="lag_days" min="1" max="21" step="1" value="7" oninput="document.getElementById('trainLagsVal').innerText = this.value + ' days'">
+                                <div class="slider-bounds">
+                                    <span>Min: 1 day</span>
+                                    <span>Max: 21 days</span>
+                                </div>
+                            </div>
+                            
+                            <div class="form-group slider-group">
+                                <div class="slider-label">
+                                    <label for="trainWindow">Rolling Feature Window</label>
+                                    <span id="trainWindowVal" class="slider-counter">7 days</span>
+                                </div>
+                                <input type="range" id="trainWindow" name="rolling_window" min="2" max="21" step="1" value="7" oninput="document.getElementById('trainWindowVal').innerText = this.value + ' days'">
+                                <div class="slider-bounds">
+                                    <span>Min: 2 days</span>
+                                    <span>Max: 21 days</span>
+                                </div>
+                            </div>
+
+                            <div class="form-group slider-group">
+                                <div class="slider-label">
+                                    <label for="trainTestSize">Validation Set Split</label>
+                                    <span id="trainTestSizeVal" class="slider-counter">20%</span>
+                                </div>
+                                <input type="range" id="trainTestSize" name="test_size" min="10" max="40" step="5" value="20" oninput="document.getElementById('trainTestSizeVal').innerText = this.value + '%'">
+                                <div class="slider-bounds">
+                                    <span>Min: 10% (Chrono)</span>
+                                    <span>Max: 40% (Chrono)</span>
+                                </div>
+                            </div>
+                            
+                            <button type="submit" class="btn btn-primary btn-block" id="btnTrain">
+                                <span id="btnTrainText"><i class="fa-solid fa-brain"></i> Retrain Model</span>
+                                <span id="btnTrainSpinner" class="hidden"><i class="fa-solid fa-spinner fa-spin"></i> Fitting Estimator...</span>
+                            </button>
+                        </form>
+                    </section>
+                    
+                    <!-- Out-of-Sample Validation Diagnostics -->
+                    <section class="glassmorphic chart-section">
+                        <div class="section-header">
+                            <h3><i class="fa-solid fa-gauge-high"></i> Chronological Validation Split Test</h3>
+                        </div>
+                        <div class="chart-container validation-chart">
+                            <div id="validationChartLoading" class="chart-loading-overlay">
+                                <i class="fa-solid fa-brain spinner-big"></i>
+                                <p>Run model training to populate validation actuals vs predictions</p>
+                            </div>
+                            <canvas id="validationChart" class="hidden"></canvas>
+                        </div>
+                    </section>
+                </div>
+            </div>
+
+            <!-- Data Management Tab -->
+            <div id="data-tab" class="tab-pane">
+                <div class="grid-2-col-wide-left">
+                    <!-- Transactions Table -->
+                    <section class="glassmorphic list-section">
+                        <div class="section-header">
+                            <h3><i class="fa-solid fa-database"></i> Recent Transactions</h3>
+                            <div class="search-box">
+                                <i class="fa-solid fa-magnifying-glass"></i>
+                                <input type="text" id="txSearch" placeholder="Search product name..." onkeyup="filterTransactions()">
+                            </div>
+                        </div>
+                        <div class="table-wrapper">
+                            <table class="data-table" id="txTable">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Product ID</th>
+                                        <th>Product Name</th>
+                                        <th>Category</th>
+                                        <th>Units</th>
+                                        <th>Unit Price</th>
+                                        <th>Promo</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="txTableBody">
+                                    <tr>
+                                        <td colspan="7" class="loading-td"><i class="fa-solid fa-spinner fa-spin"></i> Fetching transaction log...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </section>
+                    
+                    <!-- CSV Batch Upload and Individual Entry -->
+                    <div class="data-actions-col">
+                        <!-- CSV Batch Upload -->
+                        <section class="glassmorphic upload-card">
+                            <h3><i class="fa-solid fa-file-csv"></i> CSV Batch Upload</h3>
+                            <p class="sub-instructions">Upload new daily sales reports. The file must match the required columns (date, product_id, product_name, category, units_sold, unit_price, is_promo).</p>
+                            
+                            <form id="uploadForm" onsubmit="uploadCSV(event)">
+                                <div class="file-drop-area" id="fileDropArea">
+                                    <i class="fa-solid fa-cloud-arrow-up cloud-upload-icon"></i>
+                                    <span class="file-message">Drag & drop CSV file or click to select</span>
+                                    <input type="file" id="csvFile" name="file" accept=".csv" class="file-input" onchange="handleFileSelect(event)">
+                                </div>
+                                <div id="selectedFileInfo" class="selected-file-info hidden">
+                                    <i class="fa-solid fa-file-lines file-info-icon"></i>
+                                    <span id="selectedFileName">filename.csv</span>
+                                    <i class="fa-solid fa-trash-can remove-file-icon" onclick="clearFileSelection()"></i>
+                                </div>
+                                <button type="submit" class="btn btn-secondary btn-block" id="btnUpload" disabled>
+                                    <i class="fa-solid fa-circle-arrow-up"></i> Upload Batch
+                                </button>
+                            </form>
+                            
+                            <div class="upload-alert hidden" id="uploadStatusPanel">
+                                <span id="uploadStatusText"></span>
+                            </div>
+                        </section>
+                        
+                        <!-- Manual Entry -->
+                        <section class="glassmorphic upload-card">
+                            <h3><i class="fa-solid fa-plus"></i> Manual Sale Logger</h3>
+                            <form id="manualTxForm" onsubmit="logManualTransaction(event)">
+                                <div class="form-row">
+                                    <div class="form-group flex-1">
+                                        <label for="manualDate">Date</label>
+                                        <input type="date" id="manualDate" required>
+                                    </div>
+                                    <div class="form-group flex-1">
+                                        <label for="manualId">Product ID</label>
+                                        <input type="text" id="manualId" placeholder="E.g. E101" required>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="manualName">Product Name</label>
+                                    <input type="text" id="manualName" placeholder="E.g. Smart TV" required>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group flex-1">
+                                        <label for="manualCategory">Category</label>
+                                        <select id="manualCategory" required>
+                                            <option value="Electronics">Electronics</option>
+                                            <option value="Apparel">Apparel</option>
+                                            <option value="Grocery">Grocery</option>
+                                            <option value="Home & Garden">Home & Garden</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group flex-1">
+                                        <label for="manualUnits">Units Sold</label>
+                                        <input type="number" id="manualUnits" min="0" required>
+                                    </div>
+                                </div>
+                                <div class="form-row align-center">
+                                    <div class="form-group flex-1">
+                                        <label for="manualPrice">Price ($)</label>
+                                        <input type="number" id="manualPrice" step="0.01" min="0.01" required>
+                                    </div>
+                                    <div class="form-group flex-1 checkbox-group">
+                                        <label class="toggle-switch">
+                                            <input type="checkbox" id="manualPromo">
+                                            <span class="slider-toggle"></span>
+                                        </label>
+                                        <span class="checkbox-text">Promo Active</span>
+                                    </div>
+                                </div>
+                                <button type="submit" class="btn btn-primary btn-block">
+                                    <i class="fa-solid fa-floppy-disk"></i> Log Sale
+                                </button>
+                            </form>
+                        </section>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+    <!-- Link to JavaScript Controller -->
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+    {% else %}
+    <!-- ========================================== -->
+    <!--            UNAUTHENTICATED LOGIN           -->
+    <!-- ========================================== -->
+    <div class="login-bg">
+        <div class="login-card glassmorphic">
+            <div class="login-header">
+                <div class="brand-logo login-logo">
+                    <i class="fa-solid fa-chart-line-up"></i>
+                </div>
+                <h2>NEXUS</h2>
+                <p>Enter administrative credentials to access forecasts</p>
+            </div>
+            
+            <form action="/" method="POST" class="login-form">
+                <div class="form-group">
+                    <label for="username"><i class="fa-solid fa-user"></i> Username</label>
+                    <input type="text" id="username" name="username" placeholder="E.g. admin" required autocomplete="username">
+                </div>
+                <div class="form-group">
+                    <label for="password"><i class="fa-solid fa-lock"></i> Password</label>
+                    <input type="password" id="password" name="password" placeholder="••••••••" required autocomplete="current-password">
+                </div>
+                
+                <button type="submit" class="btn btn-primary btn-block login-btn">
+                    Authenticate <i class="fa-solid fa-arrow-right-to-bracket"></i>
+                </button>
+            </form>
+            
+            <div class="login-footer">
+                <span>Secure access console &bull; Enterprise OMS integration</span>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+</body>
+</html>
